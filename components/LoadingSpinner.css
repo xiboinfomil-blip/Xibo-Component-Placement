@@ -1,0 +1,112 @@
+.loading-spinner-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background-color: #050505;
+  overflow: hidden;
+}
+
+/* Ambient Background Glow */
+.ambient-glow {
+  position: absolute;
+  width: 500px;
+  height: 500px;
+  background-color: rgba(255, 255, 255, 0.03);
+  border-radius: 50%;
+  filter: blur(96px);
+}
+
+.spinner-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+/* The Premium Spinner */
+.spinner-container {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Soft pulsing glow behind the spinner */
+.spinner-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.05);
+  filter: blur(24px);
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Outer Ring */
+.outer-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: white;
+  border-right-color: rgba(255, 255, 255, 0.3);
+  animation: spin 1s linear infinite;
+}
+
+/* Inner Ring */
+.inner-ring {
+  position: absolute;
+  inset: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom-color: rgba(255, 255, 255, 0.5);
+  animation: spin 2s linear infinite reverse;
+}
+
+/* Center Anchor Dot */
+.center-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.6);
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Cinematic Typography */
+.loading-text {
+  margin-top: 48px;
+  text-align: center;
+}
+
+.loading-text p {
+  color: rgb(161, 161, 170);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Animations */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
