@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import OverlayRenderer from './OverlayRenderer';
+import { useCachedVideo } from '../hooks/useCachedVideo';
 
 export interface VideoState {
   currentTime: number;
@@ -29,11 +30,34 @@ interface VideoBackgroundProps {
 
 export default function VideoBackground({ 
   videoUrl, 
+  updatedAt,
   overlays, 
   referenceDimensions,
   onVideoStateChange 
 }: VideoBackgroundProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  
+  // ✅ Use the cached video hook
+  const { 
+    data: videoBlob, 
+    isLoading: isVideoLoading, 
+    error: videoError 
+  } = useCachedVideo(videoUrl, updatedAt);
+  
+  // ✅ Create object URL from blob
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  
+  useEffect(() => {
+    if (videoBlob) {
+      const url = URL.createObjectURL(videoBlob);
+      setObjectUrl(url);
+      
+      return () => {
+        URL.revokeObjectURL(url);
+      };
+    }
+  }, [videoBlob]);
+
   const [videoState, setVideoState] = useState<VideoState>({
     currentTime: 0,
     duration: 0,
@@ -42,6 +66,7 @@ export default function VideoBackground({
     videoHeight: 0,
     readyState: 0
   });
+  
   const [isAllOverlaysReady, setIsAllOverlaysReady] = useState(false);
 
   // ✅ FIX 1: Stabilize the callback ref so it never triggers useEffect re-runs
@@ -127,14 +152,34 @@ export default function VideoBackground({
     }));
   }
 
+  // Determine which source to use
+  const videoSource = objectUrl || videoUrl;
+
   return (
-    // Changed to w-screen h-screen to ensure it matches viewport exactly
     <div className="relative w-screen h-screen bg-black overflow-hidden">
-      {videoUrl && (
+      {/* Loading State */}
+      {isVideoLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black z-40">
+          <div className="text-white text-lg font-medium">
+            Loading video...
+          </div>
+        </div>
+      )}
+
+      {/* Error State */}
+      {videoError && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black z-40">
+          <div className="text-red-500 text-lg font-medium">
+            Failed to load video
+          </div>
+        </div>
+      )}
+
+      {/* Video Element */}
+      {videoSource && (
         <video
           ref={videoRef}
-          src={videoUrl}
-          // object-fill stretches to fit exactly w-screen h-screen
+          src={videoSource}
           className="absolute inset-0 w-full h-full object-fill"
           autoPlay
           muted
@@ -144,6 +189,7 @@ export default function VideoBackground({
         />
       )}
 
+      {/* Overlays */}
       {scaledOverlays.current.length > 0 && referenceDimensions && (
         <OverlayRenderer
           overlays={scaledOverlays.current}
@@ -152,14 +198,6 @@ export default function VideoBackground({
           onAllComponentsReady={handleAllComponentsReady}
         />
       )}
-
-      <div className="fixed top-4 right-4 bg-black/70 text-white p-3 rounded text-xs font-mono z-50">
-        <div>Video: {videoUrl ? 'Loaded' : 'Not loaded'}</div>
-        <div>Overlays: {overlays?.length || 0}</div>
-        <div>Ready: {isAllOverlaysReady ? 'Yes' : 'No'}</div>
-        <div>Time: {videoState.currentTime.toFixed(2)}s</div>
-        <div>Scale: {scaleFactor.toFixed(2)}</div>
-      </div>
     </div>
   );
 }

@@ -1,5 +1,4 @@
-// components/OverlayComponent.tsx
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 
 interface OverlayComponentProps {
   apiUrl: string;
@@ -9,6 +8,11 @@ interface OverlayComponentProps {
   onReady: () => void;
 }
 
+// Simple in-memory cache map outside the component to persist across renders/unmounts if needed
+// Or use a ref inside if you only want it to last while this component instance exists.
+// For a robust solution across different instances of this component, a global map or context is better.
+const htmlCache = new Map<string, string>();
+
 export default function OverlayComponent({ 
   apiUrl, 
   position, 
@@ -16,15 +20,42 @@ export default function OverlayComponent({
   isVisible,
   onReady 
 }: OverlayComponentProps) {
-  const [htmlContent, setHtmlContent] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [htmlContent, setHtmlContent] = useState<string | null>(htmlCache.get(apiUrl) || null);
+  const [isLoading, setIsLoading] = useState(!htmlCache.has(apiUrl));
   const [error, setError] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const hasCalledReady = useRef(false);
-  const fetchedUrl = useRef<string | null>(null);
+
+  // Memoize the style so it doesn't cause unnecessary re-renders of children if not needed
+  // However, since position/size change often, we keep it inline but ensure iframe isn't remounted.
+  const style: React.CSSProperties = {
+    position: 'absolute',
+    left: `${position.x}px`,
+    top: `${position.y}px`,
+    width: `${size.width}px`,
+    height: `${size.height}px`,
+    transform: `rotate(${position.rotation}deg)`,
+    pointerEvents: isVisible ? 'auto' : 'none',
+    opacity: isVisible ? 1 : 0,
+    transition: 'opacity 0.3s ease-in-out',
+    zIndex: 9999,
+    overflow: 'hidden',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+  };
 
   useEffect(() => {
-    if (fetchedUrl.current === apiUrl) return;
+    // If we already have it in cache and state, skip fetching
+    if (htmlContent) {
+      if (!hasCalledReady.current) {
+        hasCalledReady.current = true;
+        onReady();
+      }
+      return;
+    }
+
+    let isCancelled = false;
 
     async function fetchComponent() {
       try {
@@ -39,9 +70,10 @@ export default function OverlayComponent({
         
         let html = await response.text();
         
+        if (isCancelled) return;
+
         const baseUrl = new URL(apiUrl).origin + '/';
         
-        // ✅ FIX: Inject CSS to center content vertically and horizontally
         const centeringStyles = `
           <style>
             html, body {
@@ -65,7 +97,6 @@ export default function OverlayComponent({
           </style>
         `;
         
-        // Check if <head> exists
         if (html.includes('<head>')) {
           html = html.replace(
             '<head>', 
@@ -77,45 +108,35 @@ export default function OverlayComponent({
           html = `<html><head>${centeringStyles}<base href="${baseUrl}"></head><body>${html}</body></html>`;
         }
 
+        // Update cache
+        htmlCache.set(apiUrl, html);
         setHtmlContent(html);
-        fetchedUrl.current = apiUrl;
         
         if (!hasCalledReady.current) {
           hasCalledReady.current = true;
           onReady();
         }
       } catch (err: any) {
+        if (isCancelled) return;
         setError(err.message);
-        fetchedUrl.current = apiUrl;
         
         if (!hasCalledReady.current) {
           hasCalledReady.current = true;
           onReady();
         }
       } finally {
-        setIsLoading(false);
+        if (!isCancelled) {
+          setIsLoading(false);
+        }
       }
     }
 
     fetchComponent();
-  }, [apiUrl, onReady]);
 
-  const style: React.CSSProperties = {
-    position: 'absolute',
-    left: `${position.x}px`,
-    top: `${position.y}px`,
-    width: `${size.width}px`,
-    height: `${size.height}px`,
-    transform: `rotate(${position.rotation}deg)`,
-    pointerEvents: isVisible ? 'auto' : 'none',
-    opacity: isVisible ? 1 : 0,
-    transition: 'opacity 0.3s ease-in-out',
-    zIndex: 9999,
-    overflow: 'hidden',
-    display: 'flex', // ✅ Enable flexbox on container
-    justifyContent: 'center', // ✅ Center horizontally
-    alignItems: 'center', // ✅ Center vertically
-  };
+    return () => {
+      isCancelled = true;
+    };
+  }, [apiUrl, htmlContent, onReady]);
 
   const handleIframeLoad = () => {
     if (iframeRef.current) {
@@ -144,13 +165,14 @@ export default function OverlayComponent({
     <div style={style}>
       {isVisible && htmlContent && (
         <iframe
+          key={apiUrl} // ✅ KEY CHANGE: Only remount if URL changes
           ref={iframeRef}
           srcDoc={htmlContent}
           className="w-full h-full border-0 block"
           sandbox="allow-scripts allow-same-origin allow-forms allow-modals"
           title="Overlay Component"
           onLoad={handleIframeLoad}
-  style={{ border: 'none', outline: 'none' }}
+          style={{ border: 'none', outline: 'none' }}
           scrolling="no"
         />
       )}
