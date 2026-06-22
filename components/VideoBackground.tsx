@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import OverlayRenderer from './OverlayRenderer';
 import { useCachedVideo } from '../hooks/useCachedVideo';
+import './VideoBackground.css'; // Importing the pure CSS configuration
 
 export interface VideoState {
   currentTime: number;
@@ -156,12 +157,12 @@ export default function VideoBackground({
   const videoSource = objectUrl || videoUrl;
 
   return (
-    <div className="relative w-screen h-screen bg-black overflow-hidden">
+    <div className="video-container">
 
       {/* Error State */}
       {videoError && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black z-40">
-          <div className="text-red-500 text-lg font-medium">
+        <div className="video-error-fallback">
+          <div className="error-text">
             Failed to load video
           </div>
         </div>
@@ -172,7 +173,7 @@ export default function VideoBackground({
         <video
           ref={videoRef}
           src={videoSource}
-          className="absolute inset-0 w-full h-full object-fill"
+          className="video-element"
           autoPlay
           muted
           loop
@@ -181,14 +182,16 @@ export default function VideoBackground({
         />
       )}
 
-      {/* Overlays */}
+      {/* Overlays Canvas Wrapper */}
       {scaledOverlays.current.length > 0 && referenceDimensions && (
-        <OverlayRenderer
-          overlays={scaledOverlays.current}
-          referenceDimensions={referenceDimensions}
-          currentTime={videoState.currentTime}
-          onAllComponentsReady={handleAllComponentsReady}
-        />
+        <div className="overlay-container-layer">
+          <OverlayRenderer
+            overlays={scaledOverlays.current}
+            referenceDimensions={referenceDimensions}
+            currentTime={videoState.currentTime}
+            onAllComponentsReady={handleAllComponentsReady}
+          />
+        </div>
       )}
     </div>
   );

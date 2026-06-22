@@ -1,0 +1,60 @@
+/* Container layout and sizing */
+.video-container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  background-color: #000000;
+  overflow: hidden;
+}
+
+/* Video configuration */
+.video-element {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill; /* Stretches video to fill screen, matching your original design */
+  z-index: 10;
+}
+
+/* Interactive overlay canvas wrapper */
+.overlay-container-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 20;
+  
+  /* CRITICAL: Allows mouse clicks to pass through empty regions of the 
+     overlay container directly to the video element below it */
+  pointer-events: none; 
+}
+
+/* Individual overlay items (Ensure your OverlayRenderer components use this or similar logic) */
+.overlay-item {
+  position: absolute;
+  /* CRITICAL: Restores click/hover interaction explicitly for the overlays */
+  pointer-events: auto; 
+}
+
+/* Error state UI overlay */
+.video-error-fallback {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #000000;
+  z-index: 40;
+}
+
+.error-text {
+  color: #ef4444; /* Standard alert red */
+  font-size: 1.125rem;
+  font-weight: 500;
+}
