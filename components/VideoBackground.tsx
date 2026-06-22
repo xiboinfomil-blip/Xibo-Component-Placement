@@ -157,14 +157,6 @@ export default function VideoBackground({
 
   return (
     <div className="relative w-screen h-screen bg-black overflow-hidden">
-      {/* Loading State */}
-      {isVideoLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black z-40">
-          <div className="text-white text-lg font-medium">
-            Loading video...
-          </div>
-        </div>
-      )}
 
       {/* Error State */}
       {videoError && (
