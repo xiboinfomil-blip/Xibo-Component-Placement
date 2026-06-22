@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import OverlayRenderer from './OverlayRenderer';
 import { useCachedVideo } from '../hooks/useCachedVideo';
-import './VideoBackground.css'; // Importing the pure CSS configuration
+import './VideoBackground.css';
 
 export interface VideoState {
   currentTime: number;
@@ -38,14 +38,13 @@ export default function VideoBackground({
 }: VideoBackgroundProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   
-  // ✅ Use the cached video hook
+  // Handle video caching
   const { 
     data: videoBlob, 
     isLoading: isVideoLoading, 
     error: videoError 
   } = useCachedVideo(videoUrl, updatedAt);
   
-  // ✅ Create object URL from blob
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   
   useEffect(() => {
@@ -70,13 +69,13 @@ export default function VideoBackground({
   
   const [isAllOverlaysReady, setIsAllOverlaysReady] = useState(false);
 
-  // ✅ FIX 1: Stabilize the callback ref so it never triggers useEffect re-runs
+  // Stabilize callback reference
   const onVideoStateChangeRef = useRef(onVideoStateChange);
   useEffect(() => {
     onVideoStateChangeRef.current = onVideoStateChange;
   }, [onVideoStateChange]);
 
-  // ✅ FIX 2: Single stable useEffect for all video events
+  // Single stable observer for video element telemetry
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -100,7 +99,7 @@ export default function VideoBackground({
     const handlePlay = () => updateStateFromVideo();
     const handlePause = () => updateStateFromVideo();
     const handleEnded = () => updateStateFromVideo();
-    const handleError = (e: Event) => console.error('[VideoBackground] Video error:', e);
+    const handleError = (e: Event) => console.error('[VideoBackground] Video playback error:', e);
 
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
     video.addEventListener('timeupdate', handleTimeUpdate);
@@ -109,7 +108,8 @@ export default function VideoBackground({
     video.addEventListener('ended', handleEnded);
     video.addEventListener('error', handleError);
 
-    updateStateFromVideo();
+    // Initial check
+    if (video.readyState >= 1) updateStateFromVideo();
 
     return () => {
       video.removeEventListener('loadedmetadata', handleLoadedMetadata);
@@ -119,13 +119,13 @@ export default function VideoBackground({
       video.removeEventListener('ended', handleEnded);
       video.removeEventListener('error', handleError);
     };
-  }, []); // ✅ Empty dependency array - listeners are attached exactly ONCE
+  }, [objectUrl, videoUrl]); // Re-attach when hardware endpoints shift
 
   const handleAllComponentsReady = useCallback(() => {
     setIsAllOverlaysReady(true);
   }, []);
 
-  // ✅ FIX 3: Memoize scale factor so it doesn't recalculate on every timeupdate
+  // Compute dynamic scaling based on viewport differences
   const scaleFactor = (() => {
     if (!referenceDimensions || !videoState.videoWidth || !videoState.videoHeight) return 1;
     const scaleX = videoState.videoWidth / referenceDimensions.width;
@@ -133,7 +133,6 @@ export default function VideoBackground({
     return Math.min(scaleX, scaleY);
   })();
 
-  // ✅ FIX 4: Memoize scaled overlays so OverlayRenderer doesn't re-render unnecessarily
   const scaledOverlays = useRef<Overlay[]>([]);
   const prevScaleFactor = useRef(scaleFactor);
   
@@ -153,27 +152,21 @@ export default function VideoBackground({
     }));
   }
 
-  // Determine which source to use
   const videoSource = objectUrl || videoUrl;
 
   return (
-    <div className="video-container">
-
-      {/* Error State */}
+    <div className="video-container w-full h-full relative overflow-hidden bg-black">
       {videoError && (
-        <div className="video-error-fallback">
-          <div className="error-text">
-            Failed to load video
-          </div>
+        <div className="absolute inset-0 flex items-center justify-center z-50 bg-black text-red-500">
+          <div className="text-center font-semibold">Failed to load video layer.</div>
         </div>
       )}
 
-      {/* Video Element */}
       {videoSource && (
         <video
           ref={videoRef}
           src={videoSource}
-          className="video-element"
+          className="video-element w-full h-full object-cover"
           autoPlay
           muted
           loop
@@ -182,9 +175,8 @@ export default function VideoBackground({
         />
       )}
 
-      {/* Overlays Canvas Wrapper */}
       {scaledOverlays.current.length > 0 && referenceDimensions && (
-        <div className="overlay-container-layer">
+        <div className="overlay-container-layer absolute inset-0 pointer-events-none">
           <OverlayRenderer
             overlays={scaledOverlays.current}
             referenceDimensions={referenceDimensions}

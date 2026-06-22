@@ -1,4 +1,3 @@
-// components/OverlayRenderer.tsx
 import { useEffect, useRef, useState, useCallback } from 'react';
 import OverlayComponent from './OverlayComponent';
 
@@ -29,7 +28,7 @@ export default function OverlayRenderer({
   const [readyComponents, setReadyComponents] = useState<Set<string>>(new Set());
   const hasNotifiedReady = useRef(false);
 
-  // Update visible overlays based on current time
+  // Synchronize layout timelines with video progress metrics
   useEffect(() => {
     if (!overlays) return;
 
@@ -45,7 +44,7 @@ export default function OverlayRenderer({
     setVisibleOverlays(newVisibleOverlays);
   }, [currentTime, overlays]);
 
-  // Check if all components are ready
+  // Track readiness matrix
   useEffect(() => {
     if (!overlays || overlays.length === 0) {
       if (!hasNotifiedReady.current) {
@@ -61,24 +60,13 @@ export default function OverlayRenderer({
     }
   }, [readyComponents, overlays, onAllComponentsReady]);
 
-  // ✅ FIX: Stabilize handleComponentReady so it doesn't change on every render
   const handleComponentReady = useCallback((overlayId: string) => {
     setReadyComponents(prev => {
-      if (prev.has(overlayId)) return prev; // Avoid state update if already ready
+      if (prev.has(overlayId)) return prev;
       const newSet = new Set(prev);
       newSet.add(overlayId);
       return newSet;
     });
-  }, []);
-
-  // Cleanup iframes on unmount
-  useEffect(() => {
-    return () => {
-      if (containerRef.current) {
-        const iframes = containerRef.current.querySelectorAll('iframe');
-        iframes.forEach(iframe => { iframe.srcdoc = ''; });
-      }
-    };
   }, []);
 
   if (!overlays || !referenceDimensions) {
@@ -86,7 +74,7 @@ export default function OverlayRenderer({
   }
 
   return (
-    <div ref={containerRef} className="absolute inset-0 pointer-events-none" style={{ zIndex: 100 }}>
+    <div ref={containerRef} className="absolute inset-0 pointer-events-none w-full h-full" style={{ zIndex: 100 }}>
       {overlays.map((overlay) => {
         const isVisible = visibleOverlays.has(overlay.id);
 
