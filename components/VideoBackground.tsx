@@ -142,29 +142,55 @@ export default function VideoBackground({
   }, []);
 
   // 4. Clean, declarative scaling math with useMemo
-  const scaleFactor = useMemo(() => {
-    if (!referenceDimensions || !videoState.videoWidth || !videoState.videoHeight) return 1;
-    const scaleX = videoState.videoWidth / referenceDimensions.width;
-    const scaleY = videoState.videoHeight / referenceDimensions.height;
-    return Math.min(scaleX, scaleY);
-  }, [referenceDimensions, videoState.videoWidth, videoState.videoHeight]);
+// Replace the current scaleFactor useMemo with this:
+const scaleFactor = useMemo(() => {
+  const video = videoRef.current;
+  if (!video || !referenceDimensions) return 1;
+  
+  // Use the ACTUAL rendered dimensions, not intrinsic
+  const renderedWidth = video.clientWidth;
+  const renderedHeight = video.clientHeight;
+  
+  if (!renderedWidth || !renderedHeight) return 1;
+  
+  // Since you use object-cover, calculate the cover scale
+  const videoAspect = video.videoWidth / video.videoHeight;
+  const containerAspect = renderedWidth / renderedHeight;
+  
+  let visibleVideoWidth, visibleVideoHeight;
+  if (containerAspect > videoAspect) {
+    // Container is wider - video is letterboxed vertically
+    visibleVideoWidth = renderedWidth;
+    visibleVideoHeight = renderedWidth / videoAspect;
+  } else {
+    // Container is taller - video is pillarboxed horizontally
+    visibleVideoHeight = renderedHeight;
+    visibleVideoWidth = renderedHeight * videoAspect;
+  }
+  
+  const scaleX = visibleVideoWidth / referenceDimensions.width;
+  const scaleY = visibleVideoHeight / referenceDimensions.height;
+  
+  // Center offset for object-cover cropping
+  return { scale: Math.max(scaleX, scaleY), offsetX: (renderedWidth - visibleVideoWidth) / 2, offsetY: (renderedHeight - visibleVideoHeight) / 2 };
+}, [referenceDimensions, videoState.videoWidth, videoState.videoHeight]);
 
   // Re-calculate overlays instantly and safely on dependancy adjustments
-  const scaledOverlays = useMemo(() => {
-    if (!overlays) return [];
-    return overlays.map(overlay => ({
-      ...overlay,
-      position: {
-        ...overlay.position,
-        x: overlay.position.x * scaleFactor,
-        y: overlay.position.y * scaleFactor,
-      },
-      size: {
-        width: overlay.size.width * scaleFactor,
-        height: overlay.size.height * scaleFactor
-      }
-    }));
-  }, [overlays, scaleFactor]);
+const scaledOverlays = useMemo(() => {
+  if (!overlays || typeof scaleFactor !== 'object') return [];
+  return overlays.map(overlay => ({
+    ...overlay,
+    position: {
+      ...overlay.position,
+      x: overlay.position.x * scaleFactor.scale + scaleFactor.offsetX,
+      y: overlay.position.y * scaleFactor.scale + scaleFactor.offsetY,
+    },
+    size: {
+      width: overlay.size.width * scaleFactor.scale,
+      height: overlay.size.height * scaleFactor.scale
+    }
+  }));
+}, [overlays, scaleFactor]);
 
   return (
     <div className="video-container w-full h-full relative overflow-hidden bg-black">
