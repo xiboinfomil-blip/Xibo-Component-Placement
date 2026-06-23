@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 interface OverlayComponentProps {
   apiUrl: string;
@@ -17,16 +17,28 @@ export default function OverlayComponent({
 }: OverlayComponentProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const hasCalledReady = useRef(false);
+  const [isEngineReady, setIsEngineReady] = useState(false);
 
-  // Instantly dispatch tracking hook back to parent component tree
+  // 1. Prevent Windows WebView2 context isolation paint drops
   useEffect(() => {
     if (!hasCalledReady.current) {
       hasCalledReady.current = true;
-      onReady();
+      
+      // Delays signaling the parent CMS wrapper until the component 
+      // is safely mounted and processed by the Windows rendering thread.
+      const timer = setTimeout(() => {
+        setIsEngineReady(true);
+        if (typeof onReady === 'function') {
+          onReady();
+        }
+      }, 100);
+
+      return () => clearTimeout(timer);
     }
   }, [onReady]);
 
-  const style: React.CSSProperties = {
+  // 2. Strict styling configured specifically for Xibo Windows Display Engines
+  const containerStyle: React.CSSProperties = {
     position: 'absolute',
     left: `${position.x}px`,
     top: `${position.y}px`,
@@ -34,15 +46,16 @@ export default function OverlayComponent({
     height: `${size.height}px`,
     transform: `rotate(${position.rotation}deg)`,
     transformOrigin: 'center center',
-    // Strict visibility matrix configuration avoiding DOM remount overhead
-    pointerEvents: isVisible ? 'auto' : 'none',
-    opacity: isVisible ? 1 : 0,
-    willChange: 'opacity',
-    transition: 'opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
     zIndex: 999,
     overflow: 'hidden',
+    // Uses structural block/none toggles instead of opacity to fix 
+    // the persistent "invisible layer" bug found on Windows Player hardware.
+    display: isVisible && isEngineReady ? 'block' : 'none',
+    pointerEvents: isVisible ? 'auto' : 'none',
+    backgroundColor: 'transparent',
   };
 
+  // 3. Fail-safe forced dimensions on load event
   const handleIframeLoad = () => {
     if (iframeRef.current) {
       iframeRef.current.style.width = '100%';
@@ -51,17 +64,25 @@ export default function OverlayComponent({
   };
 
   return (
-    <div style={style}>
+    <div style={containerStyle}>
       <iframe
         ref={iframeRef}
         src={apiUrl} 
-        className="w-full h-full border-0 block bg-transparent"
-        sandbox="allow-scripts allow-same-origin allow-forms"
         title="Signage Overlay Element"
         onLoad={handleIframeLoad}
-        style={{ border: 'none', outline: 'none' }}
         scrolling="no"
-        allowTransparency={true}
+        // Uses explicit inline styles instead of pure utility classes 
+        // to bypass rendering engines that strip out framework css classes inside Xibo.
+        style={{ 
+          width: '100%', 
+          height: '100%', 
+          border: 'none', 
+          outline: 'none', 
+          display: 'block',
+          background: 'transparent'
+        }}
+        // The sandbox attribute is explicitly omitted to ensure the 
+        // local Xibo container layer allows modern Javascript features execution.
       />
     </div>
   );
