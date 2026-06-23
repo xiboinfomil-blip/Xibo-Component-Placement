@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 
 interface OverlayComponentProps {
   apiUrl: string;
@@ -18,50 +18,50 @@ export default function OverlayComponent({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const hasCalledReady = useRef(false);
 
-  // Instantly dispatch tracking hook back to parent component tree
+  // Trigger ready status immediately on mount to prevent Xibo layout blocks
   useEffect(() => {
     if (!hasCalledReady.current) {
       hasCalledReady.current = true;
-      onReady();
+      if (typeof onReady === 'function') {
+        onReady();
+      }
     }
   }, [onReady]);
 
-  const style: React.CSSProperties = {
+  // Fail-safe calculation: If isVisible is false, we throw it off-screen 
+  // instead of using display:none or opacity:0. This forces Windows WebView 
+  // to keep rendering active without hiding the DOM block.
+  const calculatedLeft = isVisible ? position.x : -9999;
+  const calculatedTop = isVisible ? position.y : -9999;
+
+  const containerStyle: React.CSSProperties = {
     position: 'absolute',
-    left: `${position.x}px`,
-    top: `${position.y}px`,
+    left: `${calculatedLeft}px`,
+    top: `${calculatedTop}px`,
     width: `${size.width}px`,
     height: `${size.height}px`,
     transform: `rotate(${position.rotation}deg)`,
     transformOrigin: 'center center',
-    // Strict visibility matrix configuration avoiding DOM remount overhead
-    pointerEvents: isVisible ? 'auto' : 'none',
-    opacity: isVisible ? 1 : 0,
-    willChange: 'opacity',
-    transition: 'opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
     zIndex: 999,
     overflow: 'hidden',
-  };
-
-  const handleIframeLoad = () => {
-    if (iframeRef.current) {
-      iframeRef.current.style.width = '100%';
-      iframeRef.current.style.height = '100%';
-    }
+    background: 'transparent',
   };
 
   return (
-    <div style={style}>
+    <div style={containerStyle}>
       <iframe
         ref={iframeRef}
         src={apiUrl} 
-        className="w-full h-full border-0 block bg-transparent"
-        sandbox="allow-scripts allow-same-origin allow-forms"
         title="Signage Overlay Element"
-        onLoad={handleIframeLoad}
-        style={{ border: 'none', outline: 'none' }}
         scrolling="no"
-        allowTransparency={true}
+        style={{ 
+          width: '100%', 
+          height: '100%', 
+          border: '0px none transparent', 
+          outline: 'none', 
+          display: 'block',
+          background: 'transparent'
+        }}
       />
     </div>
   );
