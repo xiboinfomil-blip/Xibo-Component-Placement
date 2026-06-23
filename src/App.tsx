@@ -1,12 +1,12 @@
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
-import { useCallback, useRef, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import VideoBackground, { VideoState } from '../components/VideoBackground';
 import LoadingSpinner from '../components/LoadingSpinner';
 
-// 1. Enhanced Query Client for 24/7 Signage
+// 1. Enhanced Query Client for 24/7 Signage (Safe for JSON configuration documents)
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -43,8 +43,7 @@ function VideoPlayerApp() {
   };
 
   const VIDEO_DOC_ID = getParamId();
-  const [videoState, setVideoState] = useState<VideoState | null>(null);
-  const videoControlsRef = useRef<any>(null);
+  const [, setVideoState] = useState<VideoState | null>(null);
 
   const { data: videoData, isLoading, error } = useQuery({
     queryKey: ['videoData', VIDEO_DOC_ID],
@@ -104,8 +103,7 @@ function VideoPlayerApp() {
 
   return (
     <VideoBackground 
-      videoUrl={videoData?.url}
-      updatedAt={videoData?.updatedAt}
+      videoUrl={videoData?.videoUrl || videoData?.url}
       overlays={videoData?.overlays}
       referenceDimensions={videoData?.referenceDimensions}
       onVideoStateChange={handleVideoStateChange}

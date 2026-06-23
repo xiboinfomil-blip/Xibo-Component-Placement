@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import OverlayRenderer from './OverlayRenderer';
 import './VideoBackground.css';
 
-// Declare Xibo global hooks so TypeScript doesn't throw errors
 declare global {
   interface Window {
     EmbedInit?: () => void;
@@ -36,7 +35,7 @@ interface VideoBackgroundProps {
 
 export default function VideoBackground({ 
   videoUrl, 
-  overlays, 
+  overlays = [], // Fallback default to avoid undefined crashes
   referenceDimensions,
   onVideoStateChange 
 }: VideoBackgroundProps) {
@@ -56,7 +55,6 @@ export default function VideoBackground({
   useEffect(() => {
     window.EmbedInit = () => {
       console.log('[Xibo Widget] Layout Engine Handshake initialized.');
-      // If your video needs to wait for Xibo layout metrics, handle it here
     };
 
     return () => {
@@ -69,7 +67,6 @@ export default function VideoBackground({
     const video = videoRef.current;
     if (!video || !videoUrl) return;
 
-    // Force reloading the video asset source directly
     video.load();
 
     const playPromise = video.play();
@@ -86,13 +83,13 @@ export default function VideoBackground({
     }
   }, [videoUrl]);
 
-  // Stabilize callback reference
+  // Keep callback reference updated without triggering observer re-runs
   const onVideoStateChangeRef = useRef(onVideoStateChange);
   useEffect(() => {
     onVideoStateChangeRef.current = onVideoStateChange;
   }, [onVideoStateChange]);
 
-  // Single stable observer for video element telemetry
+  // 3. Single stable observer for video element telemetry
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -111,28 +108,31 @@ export default function VideoBackground({
       onVideoStateChangeRef.current?.(newState);
     };
 
-    const handleLoadedMetadata = () => updateStateFromVideo();
-    const handleTimeUpdate = () => updateStateFromVideo();
-    const handlePlay = () => updateStateFromVideo();
-    const handlePause = () => updateStateFromVideo();
-    const handleEnded = () => updateStateFromVideo();
-    const handleError = (e: Event) => console.error('[VideoBackground] Xibo video engine playback error:', e);
+    // Throttled timeupdate helper to reduce React state-update thrashing
+    let rafId: number;
+    const handleTimeUpdate = () => {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(updateStateFromVideo);
+    };
 
-    video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    video.addEventListener('loadedmetadata', updateStateFromVideo);
     video.addEventListener('timeupdate', handleTimeUpdate);
-    video.addEventListener('play', handlePlay);
-    video.addEventListener('pause', handlePause);
-    video.addEventListener('ended', handleEnded);
+    video.addEventListener('play', updateStateFromVideo);
+    video.addEventListener('pause', updateStateFromVideo);
+    video.addEventListener('ended', updateStateFromVideo);
+    
+    const handleError = (e: Event) => console.error('[VideoBackground] Xibo video engine playback error:', e);
     video.addEventListener('error', handleError);
 
     if (video.readyState >= 1) updateStateFromVideo();
 
     return () => {
-      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      cancelAnimationFrame(rafId);
+      video.removeEventListener('loadedmetadata', updateStateFromVideo);
       video.removeEventListener('timeupdate', handleTimeUpdate);
-      video.removeEventListener('play', handlePlay);
-      video.removeEventListener('pause', handlePause);
-      video.removeEventListener('ended', handleEnded);
+      video.removeEventListener('play', updateStateFromVideo);
+      video.removeEventListener('pause', updateStateFromVideo);
+      video.removeEventListener('ended', updateStateFromVideo);
       video.removeEventListener('error', handleError);
     };
   }, [videoUrl]);
@@ -141,32 +141,30 @@ export default function VideoBackground({
     setIsAllOverlaysReady(true);
   }, []);
 
-  // Compute dynamic scaling based on viewport differences
-  const scaleFactor = (() => {
+  // 4. Clean, declarative scaling math with useMemo
+  const scaleFactor = useMemo(() => {
     if (!referenceDimensions || !videoState.videoWidth || !videoState.videoHeight) return 1;
     const scaleX = videoState.videoWidth / referenceDimensions.width;
     const scaleY = videoState.videoHeight / referenceDimensions.height;
     return Math.min(scaleX, scaleY);
-  })();
+  }, [referenceDimensions, videoState.videoWidth, videoState.videoHeight]);
 
-  const scaledOverlays = useRef<Overlay[]>([]);
-  const prevScaleFactor = useRef(scaleFactor);
-  
-  if (overlays && (prevScaleFactor.current !== scaleFactor || scaledOverlays.current.length !== overlays.length)) {
-    prevScaleFactor.current = scaleFactor;
-    scaledOverlays.current = overlays.map(overlay => ({
+  // Re-calculate overlays instantly and safely on dependancy adjustments
+  const scaledOverlays = useMemo(() => {
+    if (!overlays) return [];
+    return overlays.map(overlay => ({
       ...overlay,
       position: {
+        ...overlay.position,
         x: overlay.position.x * scaleFactor,
         y: overlay.position.y * scaleFactor,
-        rotation: overlay.position.rotation
       },
       size: {
         width: overlay.size.width * scaleFactor,
         height: overlay.size.height * scaleFactor
       }
     }));
-  }
+  }, [overlays, scaleFactor]);
 
   return (
     <div className="video-container w-full h-full relative overflow-hidden bg-black">
@@ -183,10 +181,10 @@ export default function VideoBackground({
         />
       )}
 
-      {scaledOverlays.current.length > 0 && referenceDimensions && (
+      {scaledOverlays.length > 0 && referenceDimensions && (
         <div className="overlay-container-layer absolute inset-0 pointer-events-none">
           <OverlayRenderer
-            overlays={scaledOverlays.current}
+            overlays={scaledOverlays}
             referenceDimensions={referenceDimensions}
             currentTime={videoState.currentTime}
             onAllComponentsReady={handleAllComponentsReady}
