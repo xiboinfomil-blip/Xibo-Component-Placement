@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import OverlayRenderer from './OverlayRenderer';
-import { useCachedVideo } from '../hooks/useCachedVideo';
 import './VideoBackground.css';
+
+// Declare Xibo global hooks so TypeScript doesn't throw errors
+declare global {
+  interface Window {
+    EmbedInit?: () => void;
+  }
+}
 
 export interface VideoState {
   currentTime: number;
@@ -23,7 +29,6 @@ interface Overlay {
 
 interface VideoBackgroundProps {
   videoUrl?: string;
-  updatedAt?: any;
   overlays?: Overlay[];
   referenceDimensions?: { width: number; height: number };
   onVideoStateChange?: (state: VideoState) => void;
@@ -31,33 +36,11 @@ interface VideoBackgroundProps {
 
 export default function VideoBackground({ 
   videoUrl, 
-  updatedAt,
   overlays, 
   referenceDimensions,
   onVideoStateChange 
 }: VideoBackgroundProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  
-  // Handle video caching
-  const { 
-    data: videoBlob, 
-    isLoading: isVideoLoading, 
-    error: videoError 
-  } = useCachedVideo(videoUrl, updatedAt);
-  
-  const [objectUrl, setObjectUrl] = useState<string | null>(null);
-  
-  useEffect(() => {
-    if (videoBlob) {
-      const url = URL.createObjectURL(videoBlob);
-      setObjectUrl(url);
-      
-      return () => {
-        URL.revokeObjectURL(url);
-      };
-    }
-  }, [videoBlob]);
-
   const [videoState, setVideoState] = useState<VideoState>({
     currentTime: 0,
     duration: 0,
@@ -68,6 +51,40 @@ export default function VideoBackground({
   });
   
   const [isAllOverlaysReady, setIsAllOverlaysReady] = useState(false);
+
+  // 1. Hook into Xibo's lifecycle window event
+  useEffect(() => {
+    window.EmbedInit = () => {
+      console.log('[Xibo Widget] Layout Engine Handshake initialized.');
+      // If your video needs to wait for Xibo layout metrics, handle it here
+    };
+
+    return () => {
+      delete window.EmbedInit;
+    };
+  }, []);
+
+  // 2. Heavy-duty Autoplay enforcement for Xibo Player Web Views
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !videoUrl) return;
+
+    // Force reloading the video asset source directly
+    video.load();
+
+    const playPromise = video.play();
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
+          console.log('[Xibo Widget] Video autoplay tracking started successfully.');
+        })
+        .catch((error) => {
+          console.warn('[Xibo Widget] Autoplay blocked, forcing fallback muted playback:', error);
+          video.muted = true;
+          video.play().catch(err => console.error('[Xibo Widget] Critical playback blockage:', err));
+        });
+    }
+  }, [videoUrl]);
 
   // Stabilize callback reference
   const onVideoStateChangeRef = useRef(onVideoStateChange);
@@ -99,7 +116,7 @@ export default function VideoBackground({
     const handlePlay = () => updateStateFromVideo();
     const handlePause = () => updateStateFromVideo();
     const handleEnded = () => updateStateFromVideo();
-    const handleError = (e: Event) => console.error('[VideoBackground] Video playback error:', e);
+    const handleError = (e: Event) => console.error('[VideoBackground] Xibo video engine playback error:', e);
 
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
     video.addEventListener('timeupdate', handleTimeUpdate);
@@ -108,7 +125,6 @@ export default function VideoBackground({
     video.addEventListener('ended', handleEnded);
     video.addEventListener('error', handleError);
 
-    // Initial check
     if (video.readyState >= 1) updateStateFromVideo();
 
     return () => {
@@ -119,7 +135,7 @@ export default function VideoBackground({
       video.removeEventListener('ended', handleEnded);
       video.removeEventListener('error', handleError);
     };
-  }, [objectUrl, videoUrl]); // Re-attach when hardware endpoints shift
+  }, [videoUrl]);
 
   const handleAllComponentsReady = useCallback(() => {
     setIsAllOverlaysReady(true);
@@ -152,25 +168,17 @@ export default function VideoBackground({
     }));
   }
 
-  const videoSource = objectUrl || videoUrl;
-
   return (
     <div className="video-container w-full h-full relative overflow-hidden bg-black">
-      {videoError && (
-        <div className="absolute inset-0 flex items-center justify-center z-50 bg-black text-red-500">
-          <div className="text-center font-semibold">Failed to load video layer.</div>
-        </div>
-      )}
-
-      {videoSource && (
+      {videoUrl && (
         <video
           ref={videoRef}
-          src={videoSource}
+          src={videoUrl}
           className="video-element w-full h-full object-cover"
-          autoPlay
           muted
           loop
           playsInline
+          controls={false}
           preload="auto"
         />
       )}
